@@ -1,0 +1,28 @@
+{
+  "short_name": "Intellectory",
+  "name": "Intellectory: AI Inventory Manager",
+  "description": "An intelligent inventory management application to digitize and automate daily stock tracking for businesses.",
+  "icons": [
+    {
+      "src": "/logo-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "/logo-1024.png",
+      "type": "image/png",
+      "sizes": "1024x1024",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0D0C13",
+  "background_color": "#0D0C13"
+}

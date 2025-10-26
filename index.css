@@ -1,0 +1,62 @@
+/* Global responsive sizing and compact layout tweaks to improve fit across devices
+   - Sets a responsive root font-size using clamp()
+   - Provides compact container padding and automatic scaling for headings
+   - Keeps existing UI and table layouts intact by using conservative global changes
+*/
+:root {
+  /* base font sizing: 14px on small, scales up with viewport width to 16px */
+  font-size: clamp(14px, calc(12px + 0.7vw), 16px);
+  --app-padding: clamp(8px, 1.5vw, 20px);
+  --max-content-width: 1200px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Make main app containers slightly more compact and responsive */
+.main-container, .app-container, .page {
+  padding-left: var(--app-padding);
+  padding-right: var(--app-padding);
+}
+
+/* Constrain main content width while keeping layout fluid */
+.container-centered {
+  max-width: var(--max-content-width);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+/* Scale headings more fluidly without altering visual design */
+h1 { font-size: clamp(1.6rem, 1.6rem + 0.8vw, 2.8rem); }
+h2 { font-size: clamp(1.125rem, 1.125rem + 0.6vw, 1.6rem); }
+
+/* Reduce vertical spacing slightly to pack content tighter */
+.mt-8 { margin-top: 1.25rem !important; }
+.mb-12 { margin-bottom: 2.25rem !important; }
+.p-4 { padding: 0.6rem !important; }
+.p-6 { padding: 0.9rem !important; }
+.p-2 { padding: 0.4rem !important; }
+
+/* Tables: keep layout but reduce cell padding slightly for compactness */
+table td, table th { padding: 0.45rem 0.6rem; }
+
+/* Make buttons slightly smaller on very small screens */
+@media (max-width: 420px) {
+  .rounded-full { padding-left: 0.6rem; padding-right: 0.6rem; }
+  .text-lg { font-size: 0.95rem; }
+}
+
+/* Utility to help center small modals/cards without changing layout logic */
+.centered-card { margin-left: auto; margin-right: auto; }
+
+/* Ensure welcome background overlays don't interfere with hit testing */
+.bg-grid-pattern { pointer-events: none; }
