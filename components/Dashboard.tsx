@@ -116,16 +116,7 @@ interface DashboardProps {
 }
 
 // FIX: Initialize the GoogleGenAI client.
-const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-let ai = null;
-if (geminiApiKey && geminiApiKey !== 'your_gemini_api_key_here' && geminiApiKey.length > 10) {
-  try {
-    ai = new GoogleGenAI({ apiKey: geminiApiKey });
-  } catch (error) {
-    console.error('Failed to initialize Gemini AI client:', error);
-  }
-}
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- MAIN APP COMPONENT ---
 const Dashboard: React.FC<DashboardProps> = ({ session }) => {
@@ -146,19 +137,15 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
         { data: balancesData, error: balancesError },
         { data: statusesData, error: statusesError },
         { data: historyData, error: historyError },
-        { data: dailyTotalsData, error: dailyTotalsError },
-        { data: ourBinsData, error: ourBinsError },
     ] = await Promise.all([
         supabase.from('bin_types').select('*').eq('team_id', teamId),
         supabase.from('bin_parties').select('*').eq('team_id', teamId),
         supabase.from('bin_balances').select('*').eq('team_id', teamId),
         supabase.from('bin_status_counts').select('*').eq('team_id', teamId),
         supabase.from('bin_history_log').select('*').eq('team_id', teamId).order('timestamp', { ascending: false }).limit(200),
-        supabase.from('daily_bin_totals').select('*').eq('team_id', teamId).eq('date', new Date().toISOString().split('T')[0]),
-        supabase.from('our_bins').select('*').eq('team_id', teamId),
     ]);
 
-    const errors = { binTypesError, partiesError, balancesError, statusesError, historyError, dailyTotalsError, ourBinsError };
+    const errors = { binTypesError, partiesError, balancesError, statusesError, historyError };
     for (const key in errors) {
         if (errors[key as keyof typeof errors]) {
             console.error(`Error fetching bin data (${key}):`, errors[key as keyof typeof errors]);
@@ -222,27 +209,7 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
 
     const notes = history.find(h => h.type === 'note')?.change || "Add your notes here...";
 
-    // Process daily totals
-    const dailyTotals = {
-        openingTotal: {} as BinCounts,
-        nowTotal: {} as BinCounts,
-    };
-    if (dailyTotalsData) {
-        for (const total of dailyTotalsData) {
-            dailyTotals.openingTotal[total.bin_type_id] = total.opening_total;
-            dailyTotals.nowTotal[total.bin_type_id] = total.now_total;
-        }
-    }
-
-    // Process our bins
-    const ourBins: BinCounts = {};
-    if (ourBinsData) {
-        for (const ourBin of ourBinsData) {
-            ourBins[ourBin.bin_type_id] = ourBin.quantity;
-        }
-    }
-
-    setBinStockData({ binTypes, customBinTypes, statuses, owedToUs, weOwe, history, notes, dailyTotals, ourBins });
+    setBinStockData({ binTypes, customBinTypes, statuses, owedToUs, weOwe, history, notes });
   };
 
 
@@ -752,40 +719,6 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
     else if (team) await fetchBinData(team.id);
     };
 
-    const handleDailyRollover = async () => {
-        if (!team) return;
-        setIsLoading(true);
-        
-        try {
-            const { error } = await supabase.rpc('perform_daily_rollover', {
-                p_team_id: team.id,
-                p_rollover_date: new Date().toISOString().split('T')[0],
-                p_user_id: session.user.id
-            });
-            
-            if (error) {
-                console.error("Error performing daily rollover:", error);
-                return;
-            }
-            
-            // Refresh bin data
-            await fetchBinData(team.id);
-            
-            // Log the rollover
-            const { error: logError } = await supabase.from('bin_history_log').insert({
-                team_id: team.id,
-                type: 'config',
-                change_description: 'Daily rollover completed - Opening totals updated from previous day\'s Now totals.',
-            });
-            if (logError) console.error("Error logging rollover:", logError);
-            
-        } catch (error) {
-            console.error("Daily rollover error:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     const handleDirectEdit = async (details: { partyId: string, binId: string, newValue: number }) => {
         if (!team) return;
         const { partyId, binId, newValue } = details;
@@ -856,96 +789,6 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
        setIsLoading(false);
     };
 
-    const handleUpdateDailyTotal = async (type: 'openingTotal' | 'nowTotal', binId: string, newValue: number, reason?: string) => {
-        if (!team) return;
-        
-        const today = new Date().toISOString().split('T')[0];
-        const field = type === 'openingTotal' ? 'opening_total' : 'now_total';
-        
-        // Get current value for audit log
-        const { data: currentData } = await supabase
-            .from('daily_bin_totals')
-            .select('opening_total, now_total')
-            .eq('team_id', team.id)
-            .eq('bin_type_id', binId)
-            .eq('date', today)
-            .single();
-        
-        const oldValue = currentData?.[field] || 0;
-        
-        // Update the total
-        const { error } = await supabase.from('daily_bin_totals').upsert({
-            team_id: team.id,
-            bin_type_id: binId,
-            date: today,
-            [field]: newValue,
-            ...(type === 'openingTotal' ? { now_total: currentData?.now_total || 0 } : { opening_total: currentData?.opening_total || 0 })
-        });
-        
-        if (error) {
-            console.error(`Error updating ${type}:`, error);
-            return;
-        }
-        
-        // Log the edit
-        const { error: auditError } = await supabase.from('bin_edit_audit_log').insert({
-            team_id: team.id,
-            user_id: session.user.id,
-            edit_type: type,
-            bin_type_id: binId,
-            old_value: oldValue,
-            new_value: newValue,
-            reason: reason || null,
-        });
-        
-        if (auditError) console.error("Error logging edit:", auditError);
-        
-        // Refresh data
-        await fetchBinData(team.id);
-    };
-
-    const handleUpdateOurBins = async (binId: string, newValue: number, reason?: string) => {
-        if (!team) return;
-        
-        // Get current value for audit log
-        const { data: currentData } = await supabase
-            .from('our_bins')
-            .select('quantity')
-            .eq('team_id', team.id)
-            .eq('bin_type_id', binId)
-            .single();
-        
-        const oldValue = currentData?.quantity || 0;
-        
-        // Update our bins
-        const { error } = await supabase.from('our_bins').upsert({
-            team_id: team.id,
-            bin_type_id: binId,
-            quantity: newValue,
-        });
-        
-        if (error) {
-            console.error("Error updating our bins:", error);
-            return;
-        }
-        
-        // Log the edit
-        const { error: auditError } = await supabase.from('bin_edit_audit_log').insert({
-            team_id: team.id,
-            user_id: session.user.id,
-            edit_type: 'our_bins',
-            bin_type_id: binId,
-            old_value: oldValue,
-            new_value: newValue,
-            reason: reason || null,
-        });
-        
-        if (auditError) console.error("Error logging edit:", auditError);
-        
-        // Refresh data
-        await fetchBinData(team.id);
-    };
-
   
   // --- AI COMMAND HANDLING ---
   const handleAICommand = async (command: string) => {
@@ -953,11 +796,6 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
     const dateRange = parseDateRange(command);
     if (dateRange) {
         generateReport(dateRange.start, dateRange.end, dateRange.title);
-        return;
-    }
-    
-    if (!ai) {
-        setInfoModalContent("AI functionality is not available. Please check your Gemini API key configuration.");
         return;
     }
     
@@ -1507,9 +1345,6 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
                     onRemoveParty={handleRemoveParty}
                     onUpdateNotes={handleUpdateNotes}
                     onUpdateStatusCount={handleUpdateStatusCount}
-                    onUpdateDailyTotal={handleUpdateDailyTotal}
-                    onUpdateOurBins={handleUpdateOurBins}
-                    onDailyRollover={handleDailyRollover}
                 />
             </div>
           )}

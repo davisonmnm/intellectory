@@ -70,15 +70,11 @@ const App: React.FC = () => {
   }, []);
 
 
-  console.log('App render - loading:', loading, 'session:', !!session, 'hasTeam:', hasTeam);
-
   if (loading) {
-    console.log('Showing loading screen');
     return <FullPageLoader />;
   }
 
   if (!session) {
-    console.log('No session, showing auth');
     if (authView === 'welcome') {
         return <Welcome onGetStarted={() => setAuthView('auth')} />;
     }
@@ -86,16 +82,13 @@ const App: React.FC = () => {
   }
   
   if (hasTeam === false) {
-    console.log('No team, showing setup modal');
     return <SetupTeamModal session={session} onTeamCreated={() => setHasTeam(true)} />;
   }
 
   if (hasTeam === true) {
-    console.log('Has team, showing dashboard');
     return <Dashboard key={session.user.id} session={session} />;
   }
   
-  console.log('Fallback to loading screen');
   return <FullPageLoader />;
 };
 
