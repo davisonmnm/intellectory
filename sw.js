@@ -1,4 +1,7 @@
-const CACHE_NAME = 'intellectory-cache-v1';
+// Use a timestamped cache name so new builds create a new cache and old caches
+// are removed on activation. This helps during local preview to avoid stale
+// assets being served by an older service worker.
+const CACHE_NAME = 'intellectory-cache-v' + Date.now();
 const urlsToCache = [
   '/',
   '/index.html',

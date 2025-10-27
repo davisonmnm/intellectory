@@ -118,4 +118,12 @@ export interface BinStockData {
   history: BinHistoryEntry[];
   binTypes: BinTypeDefinition[]; // Defines all columns
   customBinTypes: CustomBinType[]; // Defines sub-types for mixed breakdown
+  // Totals for the current day (used by UI and initial constants)
+  dailyTotals?: {
+    openingTotal: BinCounts;
+    nowTotal: BinCounts;
+  };
+
+  // Totals of bins owned by our company across types
+  ourBins?: BinCounts;
 }

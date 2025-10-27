@@ -115,8 +115,20 @@ interface DashboardProps {
     session: Session;
 }
 
-// FIX: Initialize the GoogleGenAI client.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// FIX: Initialize the GoogleGenAI client safely (don't throw on import if API key is missing).
+let ai: any = null;
+try {
+    // process.env.API_KEY is replaced at build time by Vite define; guard against empty values.
+    if (process.env.API_KEY && String(process.env.API_KEY).length > 0) {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        console.debug('[Dashboard] GoogleGenAI initialized (apiKey present)');
+    } else {
+        console.warn('[Dashboard] GoogleGenAI not initialized: API key is missing');
+    }
+} catch (e) {
+    console.error('[Dashboard] error initializing GoogleGenAI:', e);
+    ai = null;
+}
 
 // --- MAIN APP COMPONENT ---
 const Dashboard: React.FC<DashboardProps> = ({ session }) => {
@@ -156,12 +168,12 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
 
     // 3. Process and assemble data into the BinStockData structure
     const binTypes: BinTypeDefinition[] = binTypesData
-        ?.filter(bt => bt.category === 'standard' || bt.category === 'mixed')
-        .map(bt => ({ ...bt, id: bt.id, isDefault: bt.is_default })) ?? [];
+        ?.filter((bt: any) => bt.category === 'standard' || bt.category === 'mixed')
+        .map((bt: any) => ({ ...bt, id: bt.id, isDefault: bt.is_default })) ?? [];
     
     const customBinTypes: CustomBinType[] = binTypesData
-        ?.filter(bt => bt.sub_category)
-        .map(bt => ({ id: bt.id, name: bt.name, category: bt.sub_category as 'mixedWood' | 'mixedPlastic' })) ?? [];
+        ?.filter((bt: any) => bt.sub_category)
+        .map((bt: any) => ({ id: bt.id, name: bt.name, category: bt.sub_category as 'mixedWood' | 'mixedPlastic' })) ?? [];
 
     const statuses: BinStockData['statuses'] = { total: {}, full: {}, inFridge: {}, broken: {}, dump: {} };
     if (statusesData) {
@@ -174,7 +186,7 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
     }
     
     // Calculate totals for statuses
-    binTypesData?.forEach(bt => {
+    binTypesData?.forEach((bt: any) => {
         statuses.total[bt.id] = (statuses.full[bt.id] || 0) + (statuses.inFridge[bt.id] || 0) + (statuses.broken[bt.id] || 0) + (statuses.dump[bt.id] || 0);
     });
 
@@ -182,7 +194,7 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
     const weOwe: BinParty[] = [];
     if (partiesData && balancesData) {
         for (const party of partiesData) {
-            const partyBalances = balancesData.filter(b => b.party_id === party.id);
+            const partyBalances = balancesData.filter((b: any) => b.party_id === party.id);
             const partyOwedBins: BinCounts = {};
             const partyWeOweBins: BinCounts = {};
 
@@ -203,7 +215,7 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
         }
     }
 
-    const history: BinHistoryEntry[] = historyData ? historyData.map(h => ({
+    const history: BinHistoryEntry[] = historyData ? historyData.map((h: any) => ({
         id: h.id, timestamp: h.timestamp, change: h.change_description, type: h.type, details: h.details
     })) : [];
 
@@ -262,7 +274,7 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
         if (membersResult.data) {
             const formattedMembers = membersResult.data.map((m: any) => ({
                 id: m.users?.id, name: m.users?.full_name, email: m.users?.email, role: m.role,
-            })).filter((m): m is TeamMember => m.id && m.name && m.email);
+            })).filter((m: any): m is TeamMember => m.id && m.name && m.email);
             setTeamMembers(formattedMembers);
         }
         if(membersResult.error) console.error("Error fetching team members: ", membersResult.error.message);
