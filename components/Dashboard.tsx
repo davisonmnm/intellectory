@@ -116,7 +116,16 @@ interface DashboardProps {
 }
 
 // FIX: Initialize the GoogleGenAI client.
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+let ai = null;
+if (geminiApiKey && geminiApiKey !== 'your_gemini_api_key_here' && geminiApiKey.length > 10) {
+  try {
+    ai = new GoogleGenAI({ apiKey: geminiApiKey });
+  } catch (error) {
+    console.error('Failed to initialize Gemini AI client:', error);
+  }
+}
 
 // --- MAIN APP COMPONENT ---
 const Dashboard: React.FC<DashboardProps> = ({ session }) => {
@@ -944,6 +953,11 @@ const Dashboard: React.FC<DashboardProps> = ({ session }) => {
     const dateRange = parseDateRange(command);
     if (dateRange) {
         generateReport(dateRange.start, dateRange.end, dateRange.title);
+        return;
+    }
+    
+    if (!ai) {
+        setInfoModalContent("AI functionality is not available. Please check your Gemini API key configuration.");
         return;
     }
     
