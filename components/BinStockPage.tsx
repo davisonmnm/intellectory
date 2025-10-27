@@ -16,6 +16,9 @@ interface BinStockPageProps {
   onRemoveParty: (partyId: string, partyName: string) => void;
   onUpdateNotes: (notes: string) => void;
   onUpdateStatusCount: (statusKey: keyof BinStockData['statuses'], binId: string, newValue: number) => void;
+  onUpdateDailyTotal: (type: 'openingTotal' | 'nowTotal', binId: string, newValue: number, reason?: string) => void;
+  onUpdateOurBins: (binId: string, newValue: number, reason?: string) => void;
+  onDailyRollover: () => void;
 }
 
 
@@ -38,6 +41,11 @@ const STATUS_ROWS: { key: keyof BinStockData['statuses']; label: string, editabl
     { key: 'inFridge', label: 'In Fridge', editable: true },
     { key: 'broken', label: 'Broken', editable: true },
     { key: 'dump', label: 'Dump', editable: true },
+];
+
+const DAILY_TOTAL_ROWS: { key: 'openingTotal' | 'nowTotal'; label: string, editable: boolean, position: 'top' | 'bottom' }[] = [
+    { key: 'openingTotal', label: 'Opening Total', editable: true, position: 'top' },
+    { key: 'nowTotal', label: 'Now Total', editable: true, position: 'bottom' },
 ];
 
 // --- HELPER & CHILD COMPONENTS ---
@@ -143,7 +151,7 @@ const MixedBinCellDisplay: React.FC<{ category: 'mixedWood' | 'mixedPlastic'; bi
 
 
 // --- MAIN COMPONENT ---
-const BinStockPage: React.FC<BinStockPageProps> = ({ data, onCommand, isLoading, onBinMovement, onDirectEdit, setConfirmationRequest, onAddBinType, onRemoveBinType, onUpdateBinColor, onAddParty, onRemoveParty, onUpdateNotes, onUpdateStatusCount }) => {
+const BinStockPage: React.FC<BinStockPageProps> = ({ data, onCommand, isLoading, onBinMovement, onDirectEdit, setConfirmationRequest, onAddBinType, onRemoveBinType, onUpdateBinColor, onAddParty, onRemoveParty, onUpdateNotes, onUpdateStatusCount, onUpdateDailyTotal, onUpdateOurBins, onDailyRollover }) => {
   const [newMovement, setNewMovement] = useState({ type: 'sent' as 'sent'|'received'|'returned', quantity: '' as number | '', binId: '', partyName: '', transporter: '', binContents: '' });
   const [modal, setModal] = useState<'addParty' | 'addStandardBin' | 'addMixedBin' | 'editColor' | 'breakdown' | 'history' | null>(null);
   const [modalConfig, setModalConfig] = useState<any>({});
@@ -292,6 +300,60 @@ const BinStockPage: React.FC<BinStockPageProps> = ({ data, onCommand, isLoading,
       onUpdateStatusCount(statusKey, binId, finalNewValue);
   };
 
+  const handleDailyTotalChange = (type: 'openingTotal' | 'nowTotal', binId: string, newValue: number | '') => {
+    const finalNewValue = newValue === '' ? 0 : Number(newValue);
+    const bin = data.binTypes.find(b => b.id === binId);
+    if (!bin) return;
+
+    const oldValue = data.dailyTotals[type][binId] || 0;
+    
+    const message = (
+      <div className="space-y-2">
+        <p>Are you sure you want to manually update the <strong>{type === 'openingTotal' ? 'Opening Total' : 'Now Total'}</strong> for <strong>{bin.name}</strong>?</p>
+        <p className="text-sm text-text-secondary">
+          <strong>Old value:</strong> {oldValue}<br/>
+          <strong>New value:</strong> {finalNewValue}
+        </p>
+        <p className="text-xs text-text-secondary">This change will be logged for audit purposes.</p>
+      </div>
+    );
+
+    setConfirmationRequest({
+      title: `Confirm ${type === 'openingTotal' ? 'Opening Total' : 'Now Total'} Edit`,
+      message,
+      onConfirm: () => {
+        onUpdateDailyTotal(type, binId, finalNewValue);
+      }
+    });
+  };
+
+  const handleOurBinsChange = (binId: string, newValue: number | '') => {
+    const finalNewValue = newValue === '' ? 0 : Number(newValue);
+    const bin = data.binTypes.find(b => b.id === binId);
+    if (!bin) return;
+
+    const oldValue = data.ourBins[binId] || 0;
+    
+    const message = (
+      <div className="space-y-2">
+        <p>Are you sure you want to update the quantity of <strong>{bin.name}</strong> bins owned by your company?</p>
+        <p className="text-sm text-text-secondary">
+          <strong>Old value:</strong> {oldValue}<br/>
+          <strong>New value:</strong> {finalNewValue}
+        </p>
+        <p className="text-xs text-text-secondary">This change will be logged for audit purposes.</p>
+      </div>
+    );
+
+    setConfirmationRequest({
+      title: 'Confirm Our Bins Edit',
+      message,
+      onConfirm: () => {
+        onUpdateOurBins(binId, finalNewValue);
+      }
+    });
+  };
+
     const handlePartyBinChange = (partyId: string, binId: string, newValue: number | '') => {
         const finalNewValue = newValue === '' ? 0 : Number(newValue);
         const party = allParties.find(p => p.id === partyId);
@@ -408,6 +470,34 @@ const BinStockPage: React.FC<BinStockPageProps> = ({ data, onCommand, isLoading,
       return (
         <td key={bin.id} className="p-0 w-36 h-14">
           <EditableBinCell editable={row.editable} isTotal={row.key === 'total'} value={targetBins[bin.id]} onChange={(newValue) => handleStatusBinChange(row.key, bin.id, newValue)}/>
+        </td>
+      );
+    })
+  );
+
+  const renderDailyTotalRow = (row: typeof DAILY_TOTAL_ROWS[0], bins: BinTypeDefinition[]) => (
+    bins.map(bin => {
+      const isMixed = bin.category === 'mixed';
+      const targetBins = calculatedData.dailyTotals[row.key];
+      if (!targetBins) return <td key={`${row.key}-${bin.id}`}></td>;
+
+      if (isMixed) {
+        return (
+          <td key={bin.id} className="p-0 w-36 align-top h-full">
+            <button onClick={() => { setModal('breakdown'); setModalConfig({ context: { category: bin.id, partyType: 'dailyTotals', totalType: row.key }}); setBreakdownData(JSON.parse(JSON.stringify(targetBins))); }} className="w-full h-14 text-left hover:bg-bg-secondary transition-colors font-medium">
+              <MixedBinCellDisplay category={bin.id as 'mixedWood' | 'mixedPlastic'} bins={targetBins} customBinTypes={calculatedData.customBinTypes}/>
+            </button>
+          </td>
+        );
+      }
+      return (
+        <td key={bin.id} className="p-0 w-36 h-14">
+          <EditableBinCell 
+            editable={row.editable} 
+            isTotal={true} 
+            value={targetBins[bin.id]} 
+            onChange={(newValue) => handleDailyTotalChange(row.key, bin.id, newValue)}
+          />
         </td>
       );
     })
@@ -538,8 +628,110 @@ const BinStockPage: React.FC<BinStockPageProps> = ({ data, onCommand, isLoading,
       
       {/* --- STATUS TABLES --- */}
       <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-grow bg-bg-primary/50 rounded-lg overflow-hidden border border-border-primary"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-bg-primary"><tr><th className="p-3 w-48 font-semibold text-text-secondary sticky left-0 bg-bg-primary z-10">METRIC</th>{renderBinTableHeader(standardBins, () => { setSelectedColor(COLOR_PALETTE[0]); setModal('addStandardBin'); })}</tr></thead><tbody>{STATUS_ROWS.map(row => (<tr key={row.key} className="border-t border-border-primary"><td className="p-3 w-48 font-semibold text-text-secondary sticky left-0 bg-bg-secondary z-10">{row.label}</td>{renderStatusRow(row, standardBins)}</tr>))}</tbody></table></div></div>
-        <div className="flex-shrink-0 bg-bg-primary/50 rounded-lg overflow-hidden border border-border-primary"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-bg-primary"><tr>{renderBinTableHeader(mixedBins, () => { setSelectedColor(COLOR_PALETTE[0]); setModal('addMixedBin'); })}</tr></thead><tbody>{STATUS_ROWS.map(row => (<tr key={row.key} className="border-t border-border-primary">{renderStatusRow(row, mixedBins)}</tr>))}</tbody></table></div></div>
+        <div className="flex-grow bg-bg-primary/50 rounded-lg overflow-hidden border border-border-primary">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-bg-primary">
+                <tr>
+                  <th className="p-3 w-48 font-semibold text-text-secondary sticky left-0 bg-bg-primary z-10">METRIC</th>
+                  {renderBinTableHeader(standardBins, () => { setSelectedColor(COLOR_PALETTE[0]); setModal('addStandardBin'); })}
+                </tr>
+              </thead>
+              <tbody>
+                {/* Opening Total Row - at the top */}
+                {DAILY_TOTAL_ROWS.filter(row => row.position === 'top').map(row => (
+                  <tr key={row.key} className="border-t border-border-primary bg-accent-primary/10">
+                    <td className="p-3 w-48 font-semibold text-text-secondary sticky left-0 bg-accent-primary/20 z-10">{row.label}</td>
+                    {renderDailyTotalRow(row, standardBins)}
+                  </tr>
+                ))}
+                {/* Status Rows */}
+                {STATUS_ROWS.map(row => (
+                  <tr key={row.key} className="border-t border-border-primary">
+                    <td className="p-3 w-48 font-semibold text-text-secondary sticky left-0 bg-bg-secondary z-10">{row.label}</td>
+                    {renderStatusRow(row, standardBins)}
+                  </tr>
+                ))}
+                {/* Now Total Row - at the bottom */}
+                {DAILY_TOTAL_ROWS.filter(row => row.position === 'bottom').map(row => (
+                  <tr key={row.key} className="border-t border-border-primary bg-accent-secondary/10">
+                    <td className="p-3 w-48 font-semibold text-text-secondary sticky left-0 bg-accent-secondary/20 z-10">{row.label}</td>
+                    {renderDailyTotalRow(row, standardBins)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="flex-shrink-0 bg-bg-primary/50 rounded-lg overflow-hidden border border-border-primary">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-bg-primary">
+                <tr>{renderBinTableHeader(mixedBins, () => { setSelectedColor(COLOR_PALETTE[0]); setModal('addMixedBin'); })}</tr>
+              </thead>
+              <tbody>
+                {/* Opening Total Row - at the top */}
+                {DAILY_TOTAL_ROWS.filter(row => row.position === 'top').map(row => (
+                  <tr key={row.key} className="border-t border-border-primary bg-accent-primary/10">
+                    {renderDailyTotalRow(row, mixedBins)}
+                  </tr>
+                ))}
+                {/* Status Rows */}
+                {STATUS_ROWS.map(row => (
+                  <tr key={row.key} className="border-t border-border-primary">
+                    {renderStatusRow(row, mixedBins)}
+                  </tr>
+                ))}
+                {/* Now Total Row - at the bottom */}
+                {DAILY_TOTAL_ROWS.filter(row => row.position === 'bottom').map(row => (
+                  <tr key={row.key} className="border-t border-border-primary bg-accent-secondary/10">
+                    {renderDailyTotalRow(row, mixedBins)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* --- OUR BINS CARD --- */}
+      <div className="pt-4">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-xl font-bold text-text-primary">Our Bins</h3>
+          <button 
+            onClick={onDailyRollover} 
+            className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md bg-accent-primary hover:bg-purple-700 text-white font-semibold"
+            disabled={isLoading}
+          >
+            <Calendar size={14}/>
+            Daily Rollover
+          </button>
+        </div>
+        <div className="bg-bg-primary/50 rounded-lg p-4 border border-border-primary">
+          <p className="text-sm text-text-secondary mb-4">
+            Bins owned by your company. These are included in the Now Total calculation.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {standardBins.map(bin => (
+              <div key={bin.id} className="bg-bg-secondary rounded-lg p-3 border border-border-primary">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: bin.color }}></div>
+                  <span className="font-semibold text-white text-sm">{bin.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={data.ourBins[bin.id] || ''}
+                    onChange={(e) => handleOurBinsChange(bin.id, e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-16 bg-bg-primary border border-border-primary rounded px-2 py-1 text-white text-sm text-center"
+                    placeholder="0"
+                  />
+                  <span className="text-xs text-text-secondary">bins</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* --- OWED TO US --- */}

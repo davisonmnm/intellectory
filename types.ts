@@ -104,6 +104,49 @@ export interface BinHistoryEntry {
   }
 }
 
+export interface DailyBinTotal {
+  id: string;
+  team_id: string;
+  bin_type_id: string;
+  date: string;
+  opening_total: number;
+  now_total: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OurBin {
+  id: string;
+  team_id: string;
+  bin_type_id: string;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BinEditAuditLog {
+  id: string;
+  team_id: string;
+  user_id: string | null;
+  edit_type: 'opening_total' | 'now_total' | 'status_count' | 'party_balance' | 'our_bins';
+  bin_type_id: string | null;
+  party_id: string | null;
+  status_name: string | null;
+  old_value: number | null;
+  new_value: number | null;
+  reason: string | null;
+  timestamp: string;
+}
+
+export interface DailyRolloverLog {
+  id: string;
+  team_id: string;
+  rollover_date: string;
+  previous_date: string;
+  user_id: string | null;
+  completed_at: string;
+}
+
 export interface BinStockData {
   statuses: {
     total: BinCounts;
@@ -118,4 +161,9 @@ export interface BinStockData {
   history: BinHistoryEntry[];
   binTypes: BinTypeDefinition[]; // Defines all columns
   customBinTypes: CustomBinType[]; // Defines sub-types for mixed breakdown
+  dailyTotals: {
+    openingTotal: BinCounts;
+    nowTotal: BinCounts;
+  };
+  ourBins: BinCounts;
 }

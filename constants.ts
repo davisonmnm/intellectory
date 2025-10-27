@@ -82,6 +82,11 @@ export const INITIAL_BIN_STOCK_DATA: BinStockData = {
     ],
     binTypes: INITIAL_BIN_TYPES,
     customBinTypes: [],
+    dailyTotals: {
+        openingTotal: createEmptyBinCounts(),
+        nowTotal: createEmptyBinCounts(),
+    },
+    ourBins: createEmptyBinCounts(),
 };
 
 export const EMPTY_BIN_STOCK_DATA: BinStockData = {
@@ -98,4 +103,9 @@ export const EMPTY_BIN_STOCK_DATA: BinStockData = {
     history: [],
     binTypes: [],
     customBinTypes: [],
+    dailyTotals: {
+        openingTotal: {},
+        nowTotal: {},
+    },
+    ourBins: {},
 };
